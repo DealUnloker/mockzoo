@@ -3,10 +3,9 @@ package entity
 import "errors"
 
 var (
-	ErrUserNotFound       = errors.New("user not found")
-	ErrUserAlreadyExists  = errors.New("user already exists")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrTaskNotFound       = errors.New("task not found")
-	ErrTaskForbidden      = errors.New("task does not belong to user")
-	ErrInvalidTransition  = errors.New("invalid status transition")
+	// ErrPetNotFound is returned when a pet does not exist.
+	ErrPetNotFound = errors.New("pet not found")
+	// ErrValidation is returned when input fails domain-level validation. Wrap it with
+	// fmt.Errorf("%w: <detail>", ErrValidation) to attach a specific reason.
+	ErrValidation = errors.New("validation failed")
 )

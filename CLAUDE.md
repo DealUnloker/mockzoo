@@ -1,8 +1,16 @@
-# go-clean-template
+# mockzoo
 
-Go clean-architecture reference service. Three domains (`user`, `task`, `translation`) exposed
-over four transports (REST/Fiber, gRPC, RabbitMQ RPC, NATS RPC) from one shared use-case layer.
-Module path: `github.com/evrone/go-clean-template`. The Go version is declared in `go.mod`.
+Mockzoo is a small mock/sandbox pet API. One domain (`pet`), one transport (REST/Fiber), no auth,
+Postgres storage, hand-written OpenAPI 3.1 spec served by the app. It exists to be a deliberately
+boring, stable backend for the owner's frontend template and demo projects, replacing a dependency
+on the public Swagger Petstore sandbox. Module path: `github.com/DealUnloker/mockzoo`. The Go
+version is declared in `go.mod`.
+
+This is a trimmed fork of [evrone/go-clean-template](https://github.com/evrone/go-clean-template):
+gRPC, AMQP/RabbitMQ, NATS, JWT auth, the `user`/`task`/`translation` domains, OpenTelemetry tracing,
+Prometheus metrics and swag codegen were all removed. See the "Trimmed from go-clean-template"
+section in `README.md` for the full list and why. Do not re-add any of it without discussing first
+— the whole point of this fork is to be smaller than the template it came from.
 
 ## Commands — drive everything through the Makefile
 
@@ -12,59 +20,54 @@ different settings than CI. Use the target, not the tool.
 
 | Task | Use this | Not this |
 | --- | --- | --- |
-| Install tool binaries (`swag`, `mockgen`, `migrate`, linters) | `make bin-deps` | `go install ...` |
+| Install tool binaries (`mockgen`, `migrate`, linters) | `make bin-deps` | `go install ...` |
 | Unit tests | `make test` | `go test ./...` — the target adds `-race -covermode atomic` and scopes to `./internal/... ./pkg/...` |
 | Integration tests | `make compose-up-integration-test` | `make integration-test` — see below |
 | Lint | `make linter-golangci` | `golangci-lint run` |
 | Format | `make format` | `gofmt` — the target runs `go fix`, `gofumpt`, and `gci` with the repo's import grouping |
 | Regenerate mocks | `make mock` | `mockgen ...` |
-| Regenerate Swagger | `make swag-v1` | `swag init` — the target passes `--parseDependency -g internal/controller/restapi/router.go` |
-| Regenerate protobuf | `make proto-v1` | `protoc ...` |
 | Tidy / verify modules | `make deps` | `go mod tidy` |
 | Vulnerability scan | `make deps-audit` | `govulncheck ./...` |
-| Start dependencies (Postgres, RabbitMQ, NATS) | `make compose-up` | `docker compose up` |
+| Start dependencies (Postgres) | `make compose-up` | `docker compose up` |
 | Start the whole stack including the app | `make compose-up-all` | `docker compose up` |
 | Tear down | `make compose-down` | `docker compose down` |
-| Run the app locally | `make run` | `go run ./cmd/app` — the target regenerates docs and builds with `-tags migrate` |
+| Run the app locally | `make run` | `go run ./cmd/app` — the target builds with `-tags migrate` so migrations run on start |
 | Create a migration | `make migrate-create <name>` | `migrate create ...` |
 | Apply migrations | `make migrate-up` | `migrate -path ... up` |
 | Full check before pushing | `make pre-commit` | running the steps by hand |
 
 `make help` lists every target.
 
-Three traps in these targets:
+Two traps in these targets:
 
 - **`make integration-test` is not the one you want.** It runs `go test ./integration-test/...` on
-  the host, where the suite cannot resolve the container hostnames it needs, so it always fails.
-  `make compose-up-integration-test` is the real entry point.
+  the host, where the suite cannot resolve the `app` container hostname it needs, so it always
+  fails. `make compose-up-integration-test` is the real entry point.
 - **`make migrate-create <name>` prints an error after it succeeds.** The target reads the name via
   `$(word 2,$(MAKECMDGOALS))`, so `make` then tries to build `<name>` as a target and reports
   `No rule to make target`. The migration files are already created; ignore that line.
-- **`make run` and `make pre-commit` depend on `swag-v1` and `proto-v1`**, so they need `swag` and
-  `protoc` on `PATH`. Run `make bin-deps` first (`protoc` itself is not installed by it).
 
 Never claim a change is done without `make format`, `make linter-golangci` and `make test` passing.
 
 ## Dependency rule
 
 ```
-cmd/app → internal/app → internal/controller/*  ─┐
-                       → internal/repo/*        ─┤→ internal/usecase (interfaces)
-                                                 └→ internal/entity
+cmd/app → internal/app → internal/controller/restapi ─┐
+                       → internal/repo/persistent/pet ─┤→ internal/usecase (interfaces)
+                                                        └→ internal/entity
 ```
 
-- `internal/entity` — domain types and sentinel errors. Imports nothing from this module.
-- `internal/usecase/contracts.go` — the interfaces controllers call. `internal/usecase/<domain>/`
-  implements them.
-- `internal/repo/contracts.go` — the interfaces use cases call. `internal/repo/persistent/<domain>/`
-  (Postgres) and `internal/repo/webapi/` (outbound HTTP) implement them.
-- `internal/controller/<transport>/v1/` — one package per transport, each with its own
-  `request/` and `response/` DTOs. Controllers never import each other.
-- `pkg/` — transport-agnostic infrastructure (servers, logger, jwt, postgres, tracing). Must not
-  import `internal/`.
+- `internal/entity` — domain types and sentinel errors (`Pet`, `PetStatus`, `PetSpecies`,
+  `ErrPetNotFound`, `ErrValidation`). Imports nothing from this module.
+- `internal/usecase/contracts.go` — the `Pet` interface the controller calls.
+  `internal/usecase/pet/` implements it.
+- `internal/repo/contracts.go` — the `PetRepo` interface the use case calls.
+  `internal/repo/persistent/pet/` (Postgres) implements it.
+- `internal/controller/restapi/v1/` — HTTP handlers plus `request/` and `response/` DTOs.
+- `pkg/` — transport-agnostic infrastructure (httpserver, logger, postgres). Must not import
+  `internal/`.
 
-Inner layers never import outer ones. Wiring happens exactly once, in `internal/app/app.go`
-(`initUseCases`, `initServers`).
+Inner layers never import outer ones. Wiring happens exactly once, in `internal/app/app.go`.
 
 ## Where code goes
 
@@ -72,188 +75,130 @@ Decide by asking what the code knows about:
 
 | The code knows about… | It belongs in | Shape |
 | --- | --- | --- |
-| nothing but the domain | `internal/entity/<name>.go` | struct + methods (`Task.Transition`, `TaskStatus.Valid`) |
-| a domain rule that spans repositories | `internal/usecase/<domain>/<domain>.go` | method on `UseCase` |
-| SQL, a table, a driver error code | `internal/repo/persistent/<domain>/<domain>.go` | method on `Repo` |
-| an outbound HTTP API | `internal/repo/webapi/<name>.go` | method on the webapi struct |
-| an HTTP status, a gRPC code, a message envelope | `internal/controller/<transport>/v1/<domain>.go` | handler |
-| a server, pool, client or middleware with no domain knowledge | `pkg/<name>/` | reusable package |
+| nothing but the domain | `internal/entity/pet.go` | struct + methods (`PetStatus.Valid`, `PetSpecies.Valid`) |
+| a domain rule (defaults, clamping, validation) | `internal/usecase/pet/pet.go` | method on `UseCase` |
+| SQL, the `pets` table, a driver error code | `internal/repo/persistent/pet/pet.go` | method on `Repo` |
+| an HTTP status or the error envelope | `internal/controller/restapi/v1/pet.go` | handler |
+| a server, pool or middleware with no domain knowledge | `pkg/<name>/` | reusable package |
 
 Layout rules:
 
-- One file per domain per layer, named after the domain (`task.go`, `user.go`, `translation.go`),
-  plus a `tracing.go` in every `usecase/<domain>/` and `repo/persistent/<domain>/` package.
-- Package name matches the directory name. `internal/repo/persistent/translation/` is the one
-  violation in the tree — it declares `package persistent`, which is why `internal/app/app.go`
-  imports the three repositories under aliases. Follow `task/` and `user/`, not `translation/`.
 - Constructors are always `New`, return the *interface* from `contracts.go`, and take their
   dependencies as arguments. No package-level state — `gochecknoglobals` and `gochecknoinits` are on.
-- Unexported package constants are prefixed with an underscore (`_defaultEntityCap`,
-  `_tracerName`). `mnd` rejects bare numeric literals, so add a constant rather than inlining one.
+- Unexported package constants are prefixed with an underscore (`_defaultLimit`, `_seedIDStart`).
+  `mnd` rejects bare numeric literals, so add a constant rather than inlining one.
+- `internal/repo/persistent/pet/seed.go` is the single source of truth for the three canonical
+  seed pets; `Reset` uses it directly and the `seed_pets` migration mirrors the same values by
+  hand. Keep both in sync — there is no codegen linking them.
 
 ## The handler contract
 
-Every controller method, on every transport, does the same six things in the same order. Copy the
-shape from a neighbouring handler in the same transport.
+Every controller method does the same five things in the same order. Copy the shape from a
+neighbouring handler in `internal/controller/restapi/v1/pet.go`.
 
-1. **Get the caller.** REST: `ctx.Locals("userID").(string)`. gRPC: `grpcmw.UserIDFromContext(ctx)`.
-   AMQP / NATS: `extractUserID(d, r.j)`. A failure here is an auth error, not a 500.
-2. **Decode into a transport-local DTO** from `<transport>/v1/request/`. Never decode into an
-   `entity` type, and never pass a `request.*` type into a use case.
+1. **Parse path/query params** into their typed form (`petId` → `int64` via `parsePetID`,
+   `status`/`species` query params → `*entity.PetStatus` / `*entity.PetSpecies`). A parse failure
+   is a 400, not a 500.
+2. **Decode into a transport-local DTO** from `v1/request/` for bodies (`request.CreatePet`,
+   `request.UpdatePet`). Never decode into an `entity` type, and never pass a `request.*` type into
+   the use case — map it into a `usecase.CreatePetInput` / `usecase.UpdatePetInput` first.
 3. **Validate the DTO** with the injected `*validator.Validate` (`r.v.Struct(req)`). Structural
-   validation (required, min, max, oneof) lives here. Domain validation — anything that needs to
-   know the rules, like a status transition — lives on the entity or the use case and must not be
-   duplicated in the controller.
-4. **Call the use case** with the request context: `ctx.UserContext()` in Fiber (**not**
-   `ctx.Context()`, which drops the trace), the handler's `ctx` everywhere else. `context.Context`
-   is the first parameter of every method that crosses a layer.
-5. **Map the error.** `errors.Is` against the `entity.Err*` sentinels → a transport status. Log the
-   wrapped error, return a generic message to the caller.
-6. **Encode the response.** Return an `entity` type directly only when its JSON shape is already
-   the API shape — `entity.User` is safe this way because `PasswordHash` is tagged `json:"-"`.
-   Anything with a wrapper, a projection or a different field set gets a type in
-   `<transport>/v1/response/` (`response.TaskList`, `response.Token`). gRPC always converts through
-   `response.New*Response`.
+   validation (required, max length, oneof) lives here. Domain validation (enum validity given the
+   full picture, "name cannot be empty on update") lives on the entity or the use case and returns
+   `entity.ErrValidation` — don't duplicate it in the controller.
+4. **Call the use case** with `ctx.UserContext()` (not `ctx.Context()`).
+5. **Map the error and encode the response.** `errors.Is` against `entity.ErrPetNotFound` /
+   `entity.ErrValidation` → the matching HTTP status and `{"error":{"code","message"}}` envelope
+   (`_codePetNotFound` / `_codeValidationFailed` / `_codeInternal`). On success, return an `entity`
+   type directly when its JSON shape is already the API shape (`entity.Pet` is tagged for this);
+   otherwise use a `response.*` wrapper (`response.PetList`, `response.ResetResult`).
 
-AMQP and NATS handlers are closures returning that transport's `server.CallHandler` —
-`func(ctx, *amqp.Delivery) (any, error)` and `func(ctx, *nats.Msg) (any, error)`. Each transport
-has its own `extractUserID` in `v1/auth.go` taking its own message type. Handlers return a plain
-wrapped `error`; the RPC server turns it into a generic `ErrInternalServer` / `ErrBadHandler`
-reply. Do not hand-build an error envelope there.
+## The hard API-compatibility rule
+
+`docs/openapi.json` is hand-written and is the single source of truth for the `/v1` surface — there
+is no codegen step generating it from annotations. The owner's frontend template consumes this spec
+with `@hey-api/openapi-ts` and Zod response validation, generating a typed client against it. Three
+names in that spec must never be renamed, because the frontend's old Swagger-Petstore-based client
+already used them and the frontend is not touched when this spec changes:
+
+- the `getPetById` operationId
+- the `petId` path parameter name
+- the `Pet` schema name
+
+Breaking any of these breaks the generated frontend client silently (wrong operation name, wrong
+generated function signature) rather than with a compile error. If you rename them anyway, say so
+loudly and separately — don't bundle it with an unrelated change.
+
+**Update `docs/openapi.json` in the same commit as any handler change** under
+`internal/controller/restapi`. Route paths, request/response shapes, status codes and error codes
+in the spec must exactly match runtime behavior — that is the entire point of hand-maintaining it
+instead of trusting annotations to stay in sync.
+
+## The seed-data / reset contract
+
+Three pets are always present after a fresh migration or a call to `POST /v1/admin/reset`:
+
+| id | name | species | status |
+| --- | --- | --- | --- |
+| 1 | Barsik | cat | available |
+| 2 | Rex | dog | pending |
+| 3 | Kesha | bird | sold |
+
+These ids are stable and must never change — demos and the frontend's own fixtures rely on
+`GET /v1/pets/1` always being Barsik. The `pets_id_seq` sequence is set to 1000 after seeding, so
+every pet created through `POST /v1/pets` gets id 1001 or higher and can never collide with a seed
+row. `Reset` (`internal/repo/persistent/pet/pet.go`) does this in one transaction: truncate, reinsert
+the three rows from `seedPets()`, `setval`. If you change the seed data, update `seedPets()` in
+`internal/repo/persistent/pet/seed.go`, the `seed_pets` migration, and the seed table in `README.md`
+together.
 
 ## Conventions that will bite you
 
-**Traced decorators.** Every repo and use-case constructor returns the *interface*, wrapped:
-`func New(...) usecase.Task { return newTraced(&UseCase{...}) }`. The wrapper lives in
-`tracing.go` next to each implementation. Adding a method to a contract means implementing it in
-three places: the interface, the struct, and the `traced*` decorator. Skipping the decorator is a
-compile error that reads as an unrelated interface mismatch.
-
-**Mocks are generated, not written.** `internal/usecase/mocks_*_test.go` come from `go:generate`
-directives in the two `contracts.go` files. After any contract change run `make mock` before
-running tests.
+**Mocks are generated, not written.** `internal/usecase/mocks_*_test.go` come from `make mock`
+(runs `mockgen` against the two `contracts.go` files — see the `mock` target in `Makefile`). After
+any contract change run `make mock` before running tests.
 
 **Error style.** Domain failures are sentinel errors in `internal/entity/errors.go`
-(`ErrTaskNotFound`, `ErrTaskForbidden`, `ErrInvalidTransition`, …). Every other error is wrapped
-with the layer path: `fmt.Errorf("TaskUseCase - Create - uc.repo.Store: %w", err)`. The `err113`
-linter rejects `errors.New`/`fmt.Errorf` for new dynamic errors — add a sentinel to `entity`
+(`ErrPetNotFound`, `ErrValidation`). Wrap `ErrValidation` with `fmt.Errorf("%w: <detail>", ...)` to
+attach a specific reason rather than adding a new sentinel. Every other error is wrapped with the
+layer path: `fmt.Errorf("PetUseCase - Create - uc.repo.Create: %w", err)`. The `err113` linter
+rejects `errors.New`/`fmt.Errorf` for new dynamic errors — add or reuse a sentinel in `entity`
 instead. Controllers are the only place that translates a sentinel into a transport status.
 
-**Config is environment-only.** `config/config.go` parses env vars with `caarlos0/env`. A new
-setting needs the struct field, an entry in `.env.example`, and — if the container needs it — the
-`environment` block in `docker-compose.yml`. Fields tagged `required` make the app fail at
-startup.
+**Config is environment-only.** `config/config.go` parses env vars with `caarlos0/env`. Every field
+except `PG_URL` carries an `envDefault`, so the container only needs `PG_URL` set. A new setting
+needs the struct field, a default (unless it must be required), an entry in `.env.example`, and —
+if the container needs it — the `environment` block in `docker-compose.yml`.
 
-**The linter is strict and non-obvious.** `.golangci.yml` enables ~45 linters. The ones that
-reject otherwise-fine code: `wsl_v5` and `nlreturn` (blank line required before `return` and
-around blocks), `funlen` (65 lines / 40 statements), `gocyclo` (10), `gocognit` (15), `mnd`,
+**The linter is strict and non-obvious.** `.golangci.yml` enables ~45 linters. The ones that reject
+otherwise-fine code: `wsl_v5` and `nlreturn` (blank line required before `return` and around
+blocks), `funlen` (65 lines / 40 statements), `gocyclo` (10), `gocognit` (15), `mnd`,
 `gochecknoglobals`, `exhaustive` (switches over enum types need every case or a `default`), `dupl`
-(threshold 100 — copy-pasting a handler across transports trips it).
+(threshold 100).
 
-## Generated files — do not hand-edit
+## Adding a use case method
 
-- `docs/docs.go`, `docs/swagger.json`, `docs/swagger.yaml` ← `make swag-v1`, driven by the
-  annotation comments above REST handlers and on `NewRouter` in `internal/controller/restapi/router.go`.
-- `docs/proto/v1/*.pb.go` ← `make proto-v1` from the `.proto` files beside them.
-- `internal/usecase/mocks_*_test.go` ← `make mock`.
-
-## READMEs must be updated as a set
-
-`README.md` (English) is canonical. `README_RU.md` and `README_CN.md` are full translations that
-mirror it **section for section, table row for table row** — same headings in the same order, same
-tables, same code blocks, same links. Changing one and not the other two is the most common
-regression in this repo.
-
-Update all three whenever a change touches what they document:
-
-| Change | What to update in every README |
-| --- | --- |
-| New or changed REST / gRPC endpoint | the domain table under `Domains` (`Домены` / `领域`) |
-| New domain | the `Overview` bullet list, `Content` index, and a new `Domains` subsection |
-| New or renamed env var | the config table under `Observability` if tracing-related; otherwise the `config` section |
-| New transport, server, port or service URL | the `Quick start` service list |
-| New `make` target used in the getting-started flow | the `Quick start` code blocks |
-| Renamed or moved package under `internal/` or `pkg/` | the matching `Project structure` subsection |
-
-Rules for the translations:
-
-- Translate the prose; leave identifiers, paths, `make` targets, URLs, env var names, code blocks
-  and route strings verbatim in English.
-- Headings are translated, so the `Content` index anchors are localized too (`#домены`, `#领域`).
-  Adding or renaming a section means updating that file's own anchors — an anchor copied from the
-  English file will not resolve.
-- Keep the heading level identical across the three files.
-- If you genuinely cannot produce a translation, still add the section in English to the other two
-  files so the structure stays aligned, and say so in the change description.
-
-## Adding a use case to an existing domain
-
-1. Add the method to `internal/usecase/contracts.go`.
-2. Implement it in `internal/usecase/<domain>/<domain>.go` and mirror it in the same package's
-   `tracing.go`.
-3. If it needs new persistence, repeat the same three steps in `internal/repo/contracts.go`,
-   `internal/repo/persistent/<domain>/`, and that package's `tracing.go`.
-4. `make mock`, then extend `internal/usecase/<domain>_test.go` (table-driven, gomock, `t.Parallel()` —
+1. Add the method to `internal/usecase/contracts.go` (`Pet` interface) and, if it needs new
+   persistence, to `internal/repo/contracts.go` (`PetRepo` interface).
+2. Implement it in `internal/usecase/pet/pet.go` and, if needed, `internal/repo/persistent/pet/pet.go`.
+3. `make mock`, then extend `internal/usecase/pet_test.go` (table-driven, gomock, `t.Parallel()` —
    `paralleltest` enforces it).
-5. Expose it on whichever transports need it:
-   - REST: handler in `internal/controller/restapi/v1/<domain>.go` + route in that package's
-     `router.go` + swagger annotations, then `make swag-v1`.
-   - gRPC: `.proto` change → `make proto-v1` → controller method in
-     `internal/controller/grpc/v1/`.
-   - AMQP / NATS: handler returning a `CallHandler` + a `"v1.<domain>.<action>"` key in the
-     transport's `v1/router.go`.
-
-Transports are independent by design; adding a method to only one is a legitimate choice, not an
-oversight — but say which ones you covered.
-
-## Adding a whole domain
-
-Work outward from the entity. Every step has a counterpart in the existing `task` domain — read it
-before writing.
-
-1. **Entity** — `internal/entity/<domain>.go` with the type and its invariants; new sentinel errors
-   go in `internal/entity/errors.go`.
-2. **Migration** — `make migrate-create create_<table>`, then fill both the `.up.sql` and the
-   `.down.sql`. A missing down-migration is a review failure.
-3. **Repo contract** — add the interface to `internal/repo/contracts.go`.
-4. **Repo implementation** — `internal/repo/persistent/<domain>/<domain>.go` (`package <domain>`,
-   Squirrel queries, driver errors mapped to sentinels) plus `tracing.go` next to it, and a `New`
-   returning the interface wrapped in `newTraced`.
-5. **Use-case contract** — add the interface to `internal/usecase/contracts.go`.
-6. **Use-case implementation** — `internal/usecase/<domain>/<domain>.go` plus its `tracing.go`,
-   same `New` pattern.
-7. **`make mock`**, then `internal/usecase/<domain>_test.go` against the generated mocks.
-8. **Wiring** — add a field to `useCases` in `internal/app/app.go`, construct repo and use case in
-   `initUseCases`, and thread the use case through `initServers` into each router you are exposing.
-9. **Transports** — for each one: DTOs in `<transport>/v1/request/` and `response/`, handlers in
-   `<transport>/v1/<domain>.go`, registration in that transport's `v1/router.go`, and the use case
-   added to the `V1` / controller struct in `<transport>/v1/controller.go`. gRPC also needs
-   `docs/proto/v1/<domain>.proto` and `make proto-v1`.
-10. **Docs** — swagger annotations on the REST handlers, `make swag-v1`, and the README updates
-    listed above in all three languages.
-11. **Integration test** — `integration-test/<domain>_test.go` exercising the domain over the
-    transports you exposed.
-
-## API versioning
-
-Routes are grouped under a version package (`<transport>/v1/`). A v2 means a new sibling package
-with the same layout, registered alongside v1 in the transport's top-level `router.go` — REST adds
-an `app.Group("/v2")`, gRPC registers a second set of `NewXRoutes`, AMQP/NATS add more
-`"v2.<domain>.<action>"` keys to the same route map. v1 stays untouched. `README.md` documents this
-with worked examples per transport; follow it rather than inventing a scheme.
+4. Add the handler in `internal/controller/restapi/v1/pet.go` + route in
+   `internal/controller/restapi/v1/router.go` + update `docs/openapi.json` in the same commit.
+5. Extend `integration-test/pet_test.go` if the change is observable end-to-end.
 
 ## Database
 
 `migrations/` holds golang-migrate pairs (`<timestamp>_<name>.up.sql` / `.down.sql`). Create with
 `make migrate-create <name>`, apply with `make migrate-up`. The app applies them itself at startup
 only when built with the `migrate` build tag (`internal/app/migrate.go`) — that is what `make run`
-and the Dockerfile do. Queries are built with Squirrel via the embedded `*postgres.Postgres`;
-there is no ORM and no raw string concatenation.
+and the Dockerfile do. Queries are built with Squirrel via the embedded `*postgres.Postgres`; there
+is no ORM and no raw string concatenation.
 
 ## Tests
 
 - Unit: `internal/...` and `pkg/...`, run by `make test` with `-race`. Use-case tests use the
   generated gomock mocks, are table-driven, and call `t.Parallel()` (`paralleltest` enforces it).
 - Integration: `integration-test/` runs *inside* the docker network — it resolves the service as
-  host `app` and talks to `rabbitmq` / `nats` by container name, so it fails on the host machine.
-  Always run it through `make compose-up-integration-test`.
+  host `app`, so it fails on the host machine. Always run it through
+  `make compose-up-integration-test`.

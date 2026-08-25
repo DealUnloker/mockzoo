@@ -1,0 +1,328 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Mockzoo API",
+    "description": "Mockzoo is a small, deliberately boring sandbox mock API that serves pet data for the owner's frontend template and demo projects. State is reset on demand via POST /admin/reset.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "https://mockzoo.dealunloker.com/v1" },
+    { "url": "http://localhost:8080/v1" }
+  ],
+  "paths": {
+    "/pets": {
+      "get": {
+        "operationId": "listPets",
+        "summary": "List pets",
+        "tags": ["pets"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/PetStatus" }
+          },
+          {
+            "name": "species",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/PetSpecies" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max results. Values <= 0 are clamped to the default (20); values > 100 are clamped to 100.",
+            "required": false,
+            "schema": { "type": "integer", "format": "int32", "default": 20 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Results to skip. Negative values are clamped to 0.",
+            "required": false,
+            "schema": { "type": "integer", "format": "int32", "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of pets",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PetList" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPet",
+        "summary": "Create a pet",
+        "tags": ["pets"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePet" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pet created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pet payload",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pets/{petId}": {
+      "get": {
+        "operationId": "getPetById",
+        "summary": "Get a pet by id",
+        "tags": ["pets"],
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested pet",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pet id",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Pet not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updatePet",
+        "summary": "Update a pet",
+        "tags": ["pets"],
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdatePet" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Pet updated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid pet payload",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Pet not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePet",
+        "summary": "Delete a pet",
+        "tags": ["pets"],
+        "parameters": [
+          {
+            "name": "petId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer", "format": "int64" }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Pet deleted"
+          },
+          "400": {
+            "description": "Invalid pet id",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Pet not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/reset": {
+      "post": {
+        "operationId": "resetSandbox",
+        "summary": "Reset the sandbox to its seed state",
+        "description": "Truncates all pets and restores the three canonical seed pets (ids 1-3). Intended for demos and test isolation.",
+        "tags": ["admin"],
+        "responses": {
+          "200": {
+            "description": "Sandbox reset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["reset", "pets"],
+                  "properties": {
+                    "reset": { "type": "boolean" },
+                    "pets": { "type": "integer", "format": "int32" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PetStatus": {
+        "type": "string",
+        "enum": ["available", "pending", "sold"]
+      },
+      "PetSpecies": {
+        "type": "string",
+        "enum": ["dog", "cat", "bird", "fish", "other"]
+      },
+      "Pet": {
+        "type": "object",
+        "required": ["id", "name", "status", "species", "tags", "createdAt"],
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "name": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/PetStatus" },
+          "species": { "$ref": "#/components/schemas/PetSpecies" },
+          "breed": { "type": "string" },
+          "photoUrl": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PetList": {
+        "type": "object",
+        "required": ["items", "total"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Pet" }
+          },
+          "total": { "type": "integer", "format": "int32" }
+        }
+      },
+      "CreatePet": {
+        "type": "object",
+        "required": ["name", "species"],
+        "properties": {
+          "name": { "type": "string" },
+          "species": { "$ref": "#/components/schemas/PetSpecies" },
+          "status": { "$ref": "#/components/schemas/PetStatus" },
+          "breed": { "type": "string" },
+          "photoUrl": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "UpdatePet": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "species": { "$ref": "#/components/schemas/PetSpecies" },
+          "status": { "$ref": "#/components/schemas/PetStatus" },
+          "breed": { "type": "string" },
+          "photoUrl": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/evrone/go-clean-template/pkg/logger"
+	"github.com/DealUnloker/mockzoo/pkg/logger"
 	"github.com/goccy/go-json"
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/sync/errgroup"
@@ -32,6 +32,7 @@ type Server struct {
 	readTimeout     time.Duration
 	writeTimeout    time.Duration
 	shutdownTimeout time.Duration
+	errorHandler    fiber.ErrorHandler
 
 	logger logger.Interface
 }
@@ -64,6 +65,7 @@ func New(l logger.Interface, opts ...Option) *Server {
 		WriteTimeout: s.writeTimeout,
 		JSONDecoder:  json.Unmarshal,
 		JSONEncoder:  json.Marshal,
+		ErrorHandler: s.errorHandler,
 	})
 
 	s.App = app

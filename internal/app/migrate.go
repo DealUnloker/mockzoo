@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -25,7 +26,13 @@ func init() {
 		log.Fatalf("migrate: environment variable not declared: PG_URL")
 	}
 
-	databaseURL += "?sslmode=disable"
+	if !strings.Contains(databaseURL, "sslmode=") {
+		if strings.Contains(databaseURL, "?") {
+			databaseURL += "&sslmode=disable"
+		} else {
+			databaseURL += "?sslmode=disable"
+		}
+	}
 
 	var (
 		attempts = _defaultAttempts

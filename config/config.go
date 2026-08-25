@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -10,82 +9,33 @@ import (
 type (
 	// Config -.
 	Config struct {
-		App     app
-		HTTP    http
-		Log     log
-		PG      pg
-		GRPC    grpc
-		RMQ     rmq
-		NATS    nats
-		JWT     jwt
-		Metrics metrics
-		Swagger swagger
-		Tracing tracing
+		App  app
+		HTTP http
+		Log  log
+		PG   pg
 	}
 
 	// App -.
 	app struct {
-		Name    string `env:"APP_NAME,required"`
-		Version string `env:"APP_VERSION,required"`
+		Name    string `env:"APP_NAME" envDefault:"mockzoo"`
+		Version string `env:"APP_VERSION" envDefault:"1.0.0"`
 	}
 
 	// HTTP -.
 	http struct {
-		Port           string `env:"HTTP_PORT,required"`
+		Port           string `env:"HTTP_PORT" envDefault:"8080"`
 		UsePreforkMode bool   `env:"HTTP_USE_PREFORK_MODE" envDefault:"false"`
 	}
 
 	// Log -.
 	log struct {
-		Level string `env:"LOG_LEVEL,required"`
+		Level string `env:"LOG_LEVEL" envDefault:"info"`
 	}
 
 	// PG -.
 	pg struct {
-		PoolMax int    `env:"PG_POOL_MAX,required"`
+		PoolMax int    `env:"PG_POOL_MAX" envDefault:"2"`
 		URL     string `env:"PG_URL,required"`
-	}
-
-	// GRPC -.
-	grpc struct {
-		Port string `env:"GRPC_PORT,required"`
-	}
-
-	// RMQ -.
-	rmq struct {
-		ServerExchange string `env:"RMQ_RPC_SERVER,required"`
-		ClientExchange string `env:"RMQ_RPC_CLIENT,required"`
-		URL            string `env:"RMQ_URL,required"`
-	}
-
-	// NATS -.
-	nats struct {
-		ServerExchange string `env:"NATS_RPC_SERVER,required"`
-		URL            string `env:"NATS_URL,required"`
-	}
-
-	// JWT -.
-	jwt struct {
-		Secret      string        `env:"JWT_SECRET,required"`
-		TokenExpiry time.Duration `env:"JWT_TOKEN_EXPIRY" envDefault:"24h"`
-	}
-
-	// Metrics -.
-	metrics struct {
-		Enabled bool `env:"METRICS_ENABLED" envDefault:"true"`
-	}
-
-	// Swagger -.
-	swagger struct {
-		Enabled bool `env:"SWAGGER_ENABLED" envDefault:"false"`
-	}
-
-	// Tracing -.
-	tracing struct {
-		Enabled      bool    `env:"TRACING_ENABLED" envDefault:"false"`
-		OTLPEndpoint string  `env:"TRACING_OTLP_ENDPOINT" envDefault:"localhost:4317"`
-		OTLPInsecure bool    `env:"TRACING_OTLP_INSECURE" envDefault:"true"`
-		SampleRate   float64 `env:"TRACING_SAMPLE_RATE" envDefault:"0.1"`
 	}
 )
 

@@ -3,6 +3,8 @@ package httpserver
 import (
 	"net"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 // Option -.
@@ -40,5 +42,14 @@ func WriteTimeout(timeout time.Duration) Option {
 func ShutdownTimeout(timeout time.Duration) Option {
 	return func(s *Server) {
 		s.shutdownTimeout = timeout
+	}
+}
+
+// ErrorHandler sets a custom fiber.ErrorHandler, e.g. to render errors that
+// escape route handlers (unmatched routes, wrong methods) in an application-
+// specific envelope instead of Fiber's plain-text defaults.
+func ErrorHandler(handler fiber.ErrorHandler) Option {
+	return func(s *Server) {
+		s.errorHandler = handler
 	}
 }

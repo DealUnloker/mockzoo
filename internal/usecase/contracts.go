@@ -4,32 +4,45 @@ package usecase
 import (
 	"context"
 
-	"github.com/evrone/go-clean-template/internal/entity"
+	"github.com/DealUnloker/mockzoo/internal/entity"
 )
 
-//go:generate mockgen -source=contracts.go -destination=./mocks_usecase_test.go -package=usecase_test
-
 type (
-	// Translation -.
-	Translation interface {
-		Translate(ctx context.Context, userID string, t entity.Translation) (entity.Translation, error)
-		History(ctx context.Context, userID string) (entity.TranslationHistory, error)
+	// Pet -.
+	Pet interface {
+		List(ctx context.Context, filter PetFilter) ([]entity.Pet, int, error)
+		GetByID(ctx context.Context, id int64) (entity.Pet, error)
+		Create(ctx context.Context, input CreatePetInput) (entity.Pet, error)
+		Update(ctx context.Context, id int64, input UpdatePetInput) (entity.Pet, error)
+		Delete(ctx context.Context, id int64) error
+		Reset(ctx context.Context) error
 	}
 
-	// User -.
-	User interface {
-		Register(ctx context.Context, username, email, password string) (entity.User, error)
-		Login(ctx context.Context, email, password string) (string, error)
-		GetUser(ctx context.Context, userID string) (entity.User, error)
+	// PetFilter -.
+	PetFilter struct {
+		Status  *entity.PetStatus
+		Species *entity.PetSpecies
+		Limit   int
+		Offset  int
 	}
 
-	// Task -.
-	Task interface {
-		Create(ctx context.Context, userID, title, description string) (entity.Task, error)
-		Get(ctx context.Context, userID, taskID string) (entity.Task, error)
-		List(ctx context.Context, userID string, status *entity.TaskStatus, limit, offset int) ([]entity.Task, int, error)
-		Update(ctx context.Context, userID, taskID, title, description string) (entity.Task, error)
-		Transition(ctx context.Context, userID, taskID string, newStatus entity.TaskStatus) (entity.Task, error)
-		Delete(ctx context.Context, userID, taskID string) error
+	// CreatePetInput -.
+	CreatePetInput struct {
+		Name     string
+		Species  entity.PetSpecies
+		Status   *entity.PetStatus
+		Breed    *string
+		PhotoURL *string
+		Tags     []string
+	}
+
+	// UpdatePetInput -. All fields are optional; nil means "leave unchanged".
+	UpdatePetInput struct {
+		Name     *string
+		Species  *entity.PetSpecies
+		Status   *entity.PetStatus
+		Breed    *string
+		PhotoURL *string
+		Tags     *[]string
 	}
 )

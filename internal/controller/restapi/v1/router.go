@@ -1,46 +1,34 @@
 package v1
 
 import (
-	"github.com/evrone/go-clean-template/internal/controller/restapi/middleware"
-	"github.com/evrone/go-clean-template/internal/usecase"
-	"github.com/evrone/go-clean-template/pkg/jwt"
-	"github.com/evrone/go-clean-template/pkg/logger"
+	"github.com/DealUnloker/mockzoo/docs"
+	"github.com/DealUnloker/mockzoo/internal/usecase"
+	"github.com/DealUnloker/mockzoo/pkg/logger"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
 
 // NewRoutes -.
-func NewRoutes(apiV1Group fiber.Router, t usecase.Translation, u usecase.User, tk usecase.Task, jwtManager *jwt.Manager, l logger.Interface) {
-	r := &V1{t: t, u: u, tk: tk, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
+func NewRoutes(apiV1Group fiber.Router, p usecase.Pet, l logger.Interface) {
+	r := &V1{p: p, l: l, v: validator.New(validator.WithRequiredStructEnabled())}
 
-	// Public routes
-	authGroup := apiV1Group.Group("/auth")
+	apiV1Group.Get("/openapi.json", func(ctx *fiber.Ctx) error {
+		ctx.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+
+		return ctx.Send(docs.OpenAPIJSON)
+	})
+
+	petGroup := apiV1Group.Group("/pets")
 	{
-		authGroup.Post("/register", r.register)
-		authGroup.Post("/login", r.login)
+		petGroup.Get("/", r.listPets)
+		petGroup.Post("/", r.createPet)
+		petGroup.Get("/:petId", r.getPetByID)
+		petGroup.Patch("/:petId", r.updatePet)
+		petGroup.Delete("/:petId", r.deletePet)
 	}
 
-	// Protected routes
-	protected := apiV1Group.Group("", middleware.Auth(jwtManager))
-
-	userGroup := protected.Group("/user")
+	adminGroup := apiV1Group.Group("/admin")
 	{
-		userGroup.Get("/profile", r.profile)
-	}
-
-	taskGroup := protected.Group("/tasks")
-	{
-		taskGroup.Post("/", r.createTask)
-		taskGroup.Get("/", r.listTasks)
-		taskGroup.Get("/:id", r.getTask)
-		taskGroup.Put("/:id", r.updateTask)
-		taskGroup.Patch("/:id/status", r.transitionTask)
-		taskGroup.Delete("/:id", r.deleteTask)
-	}
-
-	translationGroup := protected.Group("/translation")
-	{
-		translationGroup.Get("/history", r.history)
-		translationGroup.Post("/do-translate", r.doTranslate)
+		adminGroup.Post("/reset", r.resetSandbox)
 	}
 }

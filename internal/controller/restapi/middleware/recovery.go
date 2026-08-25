@@ -2,13 +2,16 @@ package middleware
 
 import (
 	"fmt"
+	"net/http"
 	"runtime/debug"
 	"strings"
 
-	"github.com/evrone/go-clean-template/pkg/logger"
+	"github.com/DealUnloker/mockzoo/internal/controller/restapi/v1/response"
+	"github.com/DealUnloker/mockzoo/pkg/logger"
 	"github.com/gofiber/fiber/v2"
-	fiberRecover "github.com/gofiber/fiber/v2/middleware/recover"
 )
+
+const _codeInternal = "internal"
 
 func buildPanicMessage(ctx *fiber.Ctx, err any) string {
 	var result strings.Builder
@@ -24,15 +27,22 @@ func buildPanicMessage(ctx *fiber.Ctx, err any) string {
 	return result.String()
 }
 
-func logPanic(l logger.Interface) func(c *fiber.Ctx, err any) {
-	return func(ctx *fiber.Ctx, err any) {
-		l.Error(buildPanicMessage(ctx, err))
-	}
-}
-
+// Recovery catches panics from downstream handlers. It logs the full panic
+// value and stack trace server-side, then responds with the standard
+// {"error":{"code","message"}} envelope itself — the panic value is never
+// echoed back to the client.
 func Recovery(l logger.Interface) func(c *fiber.Ctx) error {
-	return fiberRecover.New(fiberRecover.Config{
-		EnableStackTrace:  true,
-		StackTraceHandler: logPanic(l),
-	})
+	return func(ctx *fiber.Ctx) (err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				l.Error(buildPanicMessage(ctx, r))
+
+				err = ctx.Status(http.StatusInternalServerError).JSON(response.Error{
+					Error: response.ErrorBody{Code: _codeInternal, Message: "internal server error"},
+				})
+			}
+		}()
+
+		return ctx.Next()
+	}
 }
