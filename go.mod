@@ -16,7 +16,7 @@ require (
 	github.com/caarlos0/env/v11 v11.4.1
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/goccy/go-json v0.10.6
-	github.com/gofiber/fiber/v2 v2.52.15
+	github.com/gofiber/fiber/v2 v2.52.16
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/rs/zerolog v1.35.1
